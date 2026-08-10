@@ -87,6 +87,56 @@ The functional layer is our choice for production training, so we recommend it u
 
 With the functional API, MoK is simple to use: call `schedule(...)` once to build the dispatch/combine schedule, then pass that same schedule to `forward(...)` and `backward(...)`. Before doing so, however, you need to define and manage a **config** and a **workspace**.
 
+### PyTorch autograd (BF16)
+
+The Graphcore package adds a BF16-only PyTorch autograd adapter around the same
+functional forward and backward. It changes no kernels. The adapter builds a
+schedule for every invocation, reuses MoK's cached same-shape workspace, saves
+the functional forward context, and returns the functional gradients in ordinary
+PyTorch input order:
+
+```python
+import torch.distributed as dist
+
+from mok import autograd, functional
+
+config = functional.MoKConfig()
+output = autograd.bf16(
+    config,
+    dist.group.WORLD,
+    x,
+    topk_experts,
+    router_weights,
+    w_shared_gate,
+    w_shared_up,
+    w_shared_down,
+    w_routed_gate,
+    w_routed_up,
+    w_routed_down,
+)
+loss = output.float().square().mean()
+loss.backward()
+```
+
+Activations and all weights must be BF16, router weights must be FP32, and
+`topk_experts` must be int64. The ordinary functional API remains available for
+explicit forward/backward control and for MXFP8. Shared and routed weights keep
+the functional API's common intermediate size; model-specific wider shared
+experts remain the caller's responsibility.
+
+Calls that share MoK's cached workspace must execute serially on one CUDA
+stream. Each adapter forward supports exactly one first-order backward.
+Concurrent or re-entrant calls, retained-graph replay, and higher-order
+autograd are outside the supported contract.
+
+Graphcore release builders may generate `mok/_build_info.py` immediately before
+packaging. The module must define a `BUILD_INFO` dictionary containing the clean
+source commit and target build tuple; installed code exposes it as
+`mok.AUTOGRAD_ADAPTER_BUILD_INFO`. It is absent in an ordinary source checkout.
+The tracked adapter source digest lives separately in `mok/_provenance.py`, and
+the final wheel digest must remain in the external release manifest because a
+wheel cannot contain its own non-circular digest.
+
 ### Config
 
 MoK exposes 5 hyperparameters that can affect the performance of MoE execution. Because optimal values depend heavily on the workload, you should tune and sweep them before using MoK in production.
