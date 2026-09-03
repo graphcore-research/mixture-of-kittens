@@ -76,13 +76,16 @@ def test_public_provenance_matches_adapter_source() -> None:
     assert hashlib.sha256(source).hexdigest() == mok.AUTOGRAD_ADAPTER_SOURCE_SHA256
     assert mok.AUTOGRAD_ADAPTER_API_REVISION == 1
     assert (
-        mok.AUTOGRAD_ADAPTER_PROTECTED_BASE == "3e1cf43ab93ad040afed52a45ab03cb490ffe4be"
+        mok.AUTOGRAD_ADAPTER_PROTECTED_BASE == "22fc95ae6e331a738c4a58a227a8b03cac586e12"
     )
     assert mok.__version__ == importlib.metadata.version("mixture-of-kittens")
     public_version, separator, local_version = mok.__version__.partition("+")
     assert public_version == "0.1.0"
     assert separator == "+"
-    assert local_version == f"graphcore.autograd{mok.AUTOGRAD_ADAPTER_API_REVISION}"
+    assert local_version == (
+        f"graphcore.autograd{mok.AUTOGRAD_ADAPTER_API_REVISION}"
+        f".cursor{mok.AUTOGRAD_ADAPTER_PROTECTED_BASE[:7]}"
+    )
     if mok.AUTOGRAD_ADAPTER_BUILD_INFO is not None:
         assert {
             "build_image_digest",
